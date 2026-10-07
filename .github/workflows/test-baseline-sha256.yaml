@@ -1,0 +1,50 @@
+name: test-baseline-sha256
+
+on:
+  push:
+    paths:
+      - "work/baseline-sha256/**"
+      - ".github/workflows/test-baseline-sha256.yaml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install iverilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python packages
+        run: pip install -r work/baseline-sha256/test/requirements.txt
+
+      - name: Run tests
+        run: |
+          cd work/baseline-sha256/test
+          make clean
+          make
+          # make succeeds even when a test fails, so check results.xml
+          ! grep failure results.xml
+
+      - name: Test summary
+        uses: test-summary/action@v2.3
+        with:
+          paths: "work/baseline-sha256/test/results.xml"
+        if: always()
+
+      - name: Upload waveform and measurements
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-sha256-results
+          path: |
+            work/baseline-sha256/test/tb.vcd
+            work/baseline-sha256/test/results.xml
+            work/baseline-sha256/test/measurements.json

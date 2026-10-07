@@ -1,0 +1,13 @@
+# Uji unit satu ronde Ascon (ascon_round.v) terhadap model Python.
+# Jalankan dari folder ini:  make -f Makefile.round
+
+SIM ?= icarus
+TOPLEVEL_LANG ?= verilog
+
+SIM_BUILD        = sim_build/round
+VERILOG_SOURCES  = $(PWD)/../rtl/ascon_round.v
+TOPLEVEL         = ascon_round
+MODULE           = test_ascon_round
+export COCOTB_RESULTS_FILE = results_round.xml
+
+include $(shell cocotb-config --makefiles)/Makefile.sim

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Simulasi (cocotb + Icarus)
+sim_build/
+*.vcd
+*.vcd.gz
+*.fst
+results*.xml
+measurements*.json
+work/tb/model.log
+
+# Sintesis
+work/synth/out/
+
+# File sistem operasi
+Thumbs.db
+desktop.ini
+.DS_Store

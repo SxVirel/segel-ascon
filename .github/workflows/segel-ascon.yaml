@@ -1,0 +1,121 @@
+name: segel-ascon
+
+on:
+  push:
+    paths:
+      - "work/rtl/**"
+      - "work/tb/**"
+      - "work/synth/**"
+      - "work/ref/**"
+      - "work/baseline-sha256/test/**"
+      - ".github/workflows/segel-ascon.yaml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install iverilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python packages
+        run: pip install -r work/tb/requirements.txt
+
+      - name: Model referensi (pyascon vs 1.089 KAT resmi)
+        run: python work/ref/segel_model.py | tee work/tb/model.log
+
+      - name: Uji unit ascon_round (1 ronde dan p12)
+        if: ${{ !cancelled() }}
+        run: |
+          cd work/tb
+          make -f Makefile.round
+          test -s results_round.xml
+          ! grep -q "<failure" results_round.xml
+
+      - name: Desain utama (berbagi register) + 5 test baseline SHA-256
+        if: ${{ !cancelled() }}
+        run: |
+          cd work/tb
+          make SHARED_STATE=1
+          mv results.xml results_shared1.xml
+          gzip -c tb.vcd > tb_shared1.vcd.gz
+          ! grep -q "<failure" results_shared1.xml
+
+      - name: Desain pembanding area (state Ascon terpisah), test Segel saja
+        if: ${{ !cancelled() }}
+        run: |
+          cd work/tb
+          make SHARED_STATE=0 MODULE=test_segel
+          mv results.xml results_shared0.xml
+          ! grep -q "<failure" results_shared0.xml
+
+      - name: Test summary
+        uses: test-summary/action@v2.3
+        with:
+          paths: "work/tb/results_*.xml"
+        if: always()
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: segel-ascon-test
+          path: |
+            work/tb/results_*.xml
+            work/tb/measurements*.json
+            work/tb/model.log
+            work/tb/tb_shared1.vcd.gz
+
+  synth:
+    runs-on: ubuntu-latest
+    env:
+      PDK_ROOT: ${{ github.workspace }}/pdk
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install yosys dan verilator
+        run: sudo apt-get update && sudo apt-get install -y yosys verilator && yosys -V && verilator --version
+
+      - name: Lint Verilator (peringatan dicatat, hanya error yang menggagalkan)
+        run: |
+          mkdir -p work/synth/out
+          verilator --lint-only -Wall -Wno-fatal --top-module tt_um_sxvirel_segel_ascon \
+            work/rtl/project.v work/rtl/sha256_round.v work/rtl/ascon_round.v 2>&1 | tee work/synth/out/verilator_lint.log
+
+      - name: Install Sky130 PDK (versi yang dipakai shuttle TT07)
+        uses: TinyTapeout/volare-action@v2
+        with:
+          pdk_name: sky130
+          pdk_version: 6d4d11780c40b20ee63cc98e645307a9bf2b2ab8
+          pdk_root: ${{ env.PDK_ROOT }}
+
+      - name: Sintesis (baseline, Segel Ascon, pembanding, blok ronde)
+        run: |
+          bash work/synth/synth.sh \
+            "$PDK_ROOT/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib" \
+            work/synth/out
+
+      - name: Ringkasan ke halaman run
+        if: always()
+        run: cat work/synth/out/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: segel-ascon-synth
+          path: |
+            work/synth/out/*.stat.txt
+            work/synth/out/*.log
+            work/synth/out/summary.md
+            work/synth/out/summary.json
+            work/synth/out/verilator_lint.log

@@ -1,0 +1,32 @@
+name: segel-ascon-gds
+
+# Mencoba alur GDS resmi Tiny Tapeout 07 (OpenLane 1, sky130) untuk Segel Ascon.
+# Dijalankan manual saja (Actions -> segel-ascon-gds -> Run workflow) karena butuh ±20-30 menit.
+on:
+  workflow_dispatch:
+    inputs:
+      tiles:
+        description: "Ukuran tile Tiny Tapeout (misalnya 3x2 atau 4x2)"
+        required: false
+        default: "3x2"
+
+jobs:
+  gds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Susun folder proyek Tiny Tapeout di root workspace
+        run: |
+          mkdir -p src docs
+          cp work/rtl/project.v work/rtl/sha256_round.v work/rtl/ascon_round.v src/
+          cp work/baseline-sha256/src/config.tcl src/config.tcl   # config template TT07, tidak diubah
+          cp work/tt/info.yaml info.yaml
+          sed -i 's/^  tiles: ".*"/  tiles: "${{ inputs.tiles }}"/' info.yaml
+          cp work/tt/docs/info.md docs/info.md
+          cp work/baseline-sha256/LICENSE LICENSE
+          grep -n "tiles:" info.yaml
+
+      - name: Build GDS (TinyTapeout/tt-gds-action@tt07)
+        uses: TinyTapeout/tt-gds-action@tt07
